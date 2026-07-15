@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>小红书图文生成器</title>
-    <link rel="stylesheet" href="./styles.css?v=20260715-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260715-6" />
   </head>
   <body>
     <header class="topbar">
@@ -47,7 +47,7 @@
         </label>
 
         <div class="controls" aria-label="输出设置">
-          <div class="save-line">
+          <div class="save-line" id="saveLine">
             <div>
               <span class="control-title">保存目录</span>
               <p id="directoryStatus" aria-live="polite">未设置保存目录</p>
@@ -56,6 +56,10 @@
               <button class="ghost-button" id="chooseDirectoryButton" type="button">选择目录</button>
               <button class="ghost-button" id="clearDirectoryButton" type="button">清除</button>
             </div>
+          </div>
+
+          <div class="mobile-save-hint" id="mobileSaveHint" hidden>
+            移动端不支持固定保存目录，点击下载会调用浏览器原生下载。请在浏览器下载列表或手机文件管理的下载目录查看图片。
           </div>
 
           <div class="control-line">
@@ -168,6 +172,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=20260715-5"></script>
+    <script src="./app.js?v=20260715-6"></script>
   </body>
 </html>

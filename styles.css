@@ -229,6 +229,10 @@ textarea::placeholder {
   background: #fffaf2;
 }
 
+.save-line[hidden] {
+  display: none;
+}
+
 .save-line p {
   max-width: 380px;
   margin: 6px 0 0;
@@ -242,6 +246,21 @@ textarea::placeholder {
   display: flex;
   flex: 0 0 auto;
   gap: 8px;
+}
+
+.mobile-save-hint {
+  padding: 11px 12px;
+  border: 1px solid rgba(201, 79, 61, 0.24);
+  border-radius: 8px;
+  background: #fff4ed;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.mobile-save-hint[hidden] {
+  display: none;
 }
 
 .control-line {

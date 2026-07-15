@@ -79,6 +79,8 @@
     clearButton: document.getElementById("clearButton"),
     chooseDirectoryButton: document.getElementById("chooseDirectoryButton"),
     clearDirectoryButton: document.getElementById("clearDirectoryButton"),
+    saveLine: document.getElementById("saveLine"),
+    mobileSaveHint: document.getElementById("mobileSaveHint"),
     directoryStatus: document.getElementById("directoryStatus"),
     themeSelect: document.getElementById("themeSelect"),
     fontSelect: document.getElementById("fontSelect"),
@@ -441,7 +443,7 @@
   }
 
   function supportsDirectoryMemory() {
-    return supportsDirectoryExport() && "indexedDB" in window;
+    return !isMobileLike() && supportsDirectoryExport() && "indexedDB" in window;
   }
 
   function isMobileLike() {
@@ -452,22 +454,17 @@
     );
   }
 
-  function supportsNativeFileShare() {
-    return (
-      isMobileLike() &&
-      typeof navigator.share === "function" &&
-      typeof navigator.canShare === "function" &&
-      typeof File === "function"
-    );
+  function shouldUseMobileNativeDownload() {
+    return isMobileLike();
   }
 
   function getFallbackSaveLabel() {
-    if (supportsSaveFilePicker()) {
-      return "保存窗口";
+    if (shouldUseMobileNativeDownload()) {
+      return "浏览器原生下载";
     }
 
-    if (supportsNativeFileShare()) {
-      return "系统保存面板";
+    if (supportsSaveFilePicker()) {
+      return "保存窗口";
     }
 
     return "浏览器下载";
@@ -481,7 +478,7 @@
     }
 
     if (isMobileLike()) {
-      return `移动端浏览器通常不支持固定目录，将使用${fallback}`;
+      return `移动端不支持固定保存目录，将使用${fallback}`;
     }
 
     return `当前浏览器不支持固定目录，将使用${fallback}`;
@@ -489,6 +486,16 @@
 
   function updateDirectoryControls() {
     const directorySupported = supportsDirectoryExport();
+    const mobileNativeDownload = shouldUseMobileNativeDownload();
+
+    if (els.saveLine) {
+      els.saveLine.hidden = mobileNativeDownload;
+    }
+
+    if (els.mobileSaveHint) {
+      els.mobileSaveHint.hidden = !mobileNativeDownload;
+    }
+
     els.chooseDirectoryButton.textContent = directorySupported ? "选择目录" : "保存说明";
     els.clearDirectoryButton.disabled = !directorySupported && !exportDirectoryHandle;
   }
@@ -529,6 +536,14 @@
   }
 
   async function loadSavedDirectory() {
+    updateDirectoryControls();
+
+    if (shouldUseMobileNativeDownload()) {
+      exportDirectoryHandle = null;
+      updateDirectoryStatus();
+      return;
+    }
+
     if (!supportsDirectoryMemory()) {
       updateDirectoryStatus();
       return;
@@ -544,6 +559,14 @@
   }
 
   async function chooseDirectory() {
+    if (shouldUseMobileNativeDownload()) {
+      const message =
+        "移动端不支持固定保存目录，点击下载会直接调用浏览器原生下载。请在浏览器下载列表或手机文件管理的下载目录查看图片。";
+      updateDirectoryStatus(message);
+      showExportDialog("移动端保存说明", message);
+      return;
+    }
+
     if (!supportsDirectoryExport()) {
       const message = `${getDirectoryUnsupportedMessage()}。点击下载时会优先弹出可用的保存窗口；如果浏览器不支持，会保存到默认下载目录。`;
       updateDirectoryStatus(message);
@@ -839,41 +862,6 @@
     return savedCount;
   }
 
-  async function canvasesToFiles(canvases, filenames) {
-    const files = [];
-
-    for (let index = 0; index < canvases.length; index += 1) {
-      const blob = await canvasToBlob(canvases[index]);
-      files.push(new File([blob], filenames[index], { type: "image/png" }));
-    }
-
-    return files;
-  }
-
-  function canShareFiles(files) {
-    try {
-      return supportsNativeFileShare() && navigator.canShare({ files });
-    } catch (error) {
-      return false;
-    }
-  }
-
-  async function shareCanvases(canvases, filenames, settings) {
-    const files = await canvasesToFiles(canvases, filenames);
-
-    if (!canShareFiles(files)) {
-      return false;
-    }
-
-    await navigator.share({
-      files,
-      title: sanitizeFileBase(settings.title),
-      text: "小红书图文图片",
-    });
-
-    return true;
-  }
-
   async function downloadCanvas(canvas, filename) {
     const blob = await canvasToBlob(canvas);
 
@@ -887,9 +875,12 @@
       link.remove();
 
       window.setTimeout(() => {
-        URL.revokeObjectURL(url);
         resolve();
       }, 120);
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 60000);
     });
   }
 
@@ -902,6 +893,19 @@
     const canvases = primaryOnly ? latestCanvases.slice(0, 1) : latestCanvases;
 
     els.statusText.textContent = `正在导出 ${canvases.length} 张`;
+
+    const filenames = buildExportFileNames(settings, canvases.length, 0);
+
+    if (shouldUseMobileNativeDownload()) {
+      for (let index = 0; index < canvases.length; index += 1) {
+        await downloadCanvas(canvases[index], filenames[index]);
+      }
+
+      const message = `已调用浏览器原生下载 ${canvases.length} 张。请在浏览器下载列表或手机文件管理的下载目录查看图片。`;
+      els.statusText.textContent = message;
+      showExportDialog("已开始下载", message);
+      return;
+    }
 
     if (exportDirectoryHandle) {
       const hasPermission = await verifyDirectoryPermission(exportDirectoryHandle);
@@ -926,8 +930,6 @@
       updateDirectoryStatus("目录权限失效，将使用普通下载");
     }
 
-    const filenames = buildExportFileNames(settings, canvases.length, 0);
-
     if (supportsSaveFilePicker()) {
       try {
         const savedCount = await saveCanvasesWithPicker(canvases, filenames);
@@ -946,28 +948,6 @@
         }
 
         els.statusText.textContent = "保存窗口不可用，将改用浏览器下载";
-      }
-    }
-
-    if (supportsNativeFileShare()) {
-      try {
-        const shared = await shareCanvases(canvases, filenames, settings);
-
-        if (shared) {
-          const message = `已打开系统保存面板，共 ${canvases.length} 张`;
-          els.statusText.textContent = message;
-          showExportDialog("保存面板已打开", message);
-          return;
-        }
-      } catch (error) {
-        if (error && error.name === "AbortError") {
-          const message = "已取消系统保存";
-          els.statusText.textContent = message;
-          showExportDialog("已取消保存", message);
-          return;
-        }
-
-        els.statusText.textContent = "系统保存面板不可用，将改用浏览器下载";
       }
     }
 
