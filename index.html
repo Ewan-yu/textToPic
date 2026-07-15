@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小红书图文生成器</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Text To Pic</p>
+        <h1>小红书图文生成器</h1>
+      </div>
+      <div class="topbar-status" id="statusText">就绪</div>
+    </header>
+
+    <main class="workspace">
+      <section class="editor-pane" aria-label="编辑区">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">正文</p>
+            <h2>输入内容</h2>
+          </div>
+          <div class="quick-actions">
+            <button class="ghost-button" id="sampleButton" type="button">示例</button>
+            <button class="ghost-button" id="clearButton" type="button">清空</button>
+          </div>
+        </div>
+
+        <label class="textarea-wrap" for="textInput">
+          <textarea
+            id="textInput"
+            spellcheck="false"
+            placeholder="粘贴正文"
+          ></textarea>
+        </label>
+
+        <div class="controls" aria-label="输出设置">
+          <div class="control-line">
+            <span class="control-title">输出</span>
+            <div class="segmented" role="radiogroup" aria-label="输出模式">
+              <label>
+                <input type="radio" name="exportMode" value="long" checked />
+                <span>长图</span>
+              </label>
+              <label>
+                <input type="radio" name="exportMode" value="pages" />
+                <span>固定分段</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-grid">
+            <label class="field" for="themeSelect">
+              <span>模板</span>
+              <select id="themeSelect">
+                <option value="clean">清白</option>
+                <option value="ink">墨绿</option>
+                <option value="rose">绯红</option>
+                <option value="night">夜读</option>
+              </select>
+            </label>
+
+            <label class="field" for="fontSelect">
+              <span>字体</span>
+              <select id="fontSelect">
+                <option value="system">现代黑体</option>
+                <option value="serif">书页宋体</option>
+                <option value="kai">手写楷体</option>
+              </select>
+            </label>
+
+            <label class="field" for="widthSelect">
+              <span>宽度</span>
+              <select id="widthSelect">
+                <option value="1080">1080 px</option>
+                <option value="1242">1242 px</option>
+              </select>
+            </label>
+
+            <label class="field" for="sliceHeight">
+              <span>分段高度</span>
+              <select id="sliceHeight">
+                <option value="1440">1440 px</option>
+                <option value="1620">1620 px</option>
+                <option value="1920">1920 px</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="range-grid">
+            <label class="range-field" for="fontSize">
+              <span>字号 <strong id="fontSizeValue">46</strong></span>
+              <input id="fontSize" type="range" min="34" max="66" value="46" />
+            </label>
+
+            <label class="range-field" for="lineHeight">
+              <span>行距 <strong id="lineHeightValue">1.75</strong></span>
+              <input id="lineHeight" type="range" min="1.45" max="2.15" step="0.05" value="1.75" />
+            </label>
+
+            <label class="range-field" for="pagePadding">
+              <span>边距 <strong id="pagePaddingValue">118</strong></span>
+              <input id="pagePadding" type="range" min="72" max="180" value="118" />
+            </label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="primary-button" id="downloadPrimary" type="button">下载长图</button>
+          <button class="secondary-button" id="downloadAll" type="button">下载全部</button>
+        </div>
+      </section>
+
+      <aside class="preview-pane" aria-label="预览区">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">预览</p>
+            <h2>输出图片</h2>
+          </div>
+          <div class="preview-meta" id="previewMeta">0 张</div>
+        </div>
+        <div class="preview-scroller">
+          <div class="preview-list" id="previewList"></div>
+        </div>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

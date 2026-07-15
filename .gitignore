@@ -1,0 +1,13 @@
+# Local agent and sandbox files
+.agents/
+.codex/
+.chrome-profile/
+
+# Browser verification artifacts
+verification/
+*.png
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.log
