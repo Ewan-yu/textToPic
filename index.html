@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>小红书图文生成器</title>
-    <link rel="stylesheet" href="./styles.css?v=20260715-4" />
+    <link rel="stylesheet" href="./styles.css?v=20260715-5" />
   </head>
   <body>
     <header class="topbar">
@@ -12,7 +12,7 @@
         <p class="eyebrow">Text To Pic</p>
         <h1>小红书图文生成器</h1>
       </div>
-      <div class="topbar-status" id="statusText">就绪</div>
+      <div class="topbar-status" id="statusText" role="status" aria-live="polite">就绪</div>
     </header>
 
     <main class="workspace">
@@ -50,7 +50,7 @@
           <div class="save-line">
             <div>
               <span class="control-title">保存目录</span>
-              <p id="directoryStatus">未设置保存目录</p>
+              <p id="directoryStatus" aria-live="polite">未设置保存目录</p>
             </div>
             <div class="directory-actions">
               <button class="ghost-button" id="chooseDirectoryButton" type="button">选择目录</button>
@@ -168,6 +168,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=20260715-4"></script>
+    <script src="./app.js?v=20260715-5"></script>
   </body>
 </html>

@@ -5,6 +5,12 @@
   const SETTINGS_DB = "text-to-pic-settings";
   const SETTINGS_STORE = "kv";
   const DIRECTORY_KEY = "export-directory";
+  const PNG_FILE_TYPES = [
+    {
+      description: "PNG 图片",
+      accept: { "image/png": [".png"] },
+    },
+  ];
   const SAMPLE_TEXT = `今天想分享一个很适合小红书长文的排版方式。
 
 它适合：
@@ -430,8 +436,61 @@
     return window.isSecureContext && typeof window.showDirectoryPicker === "function";
   }
 
+  function supportsSaveFilePicker() {
+    return window.isSecureContext && typeof window.showSaveFilePicker === "function";
+  }
+
   function supportsDirectoryMemory() {
     return supportsDirectoryExport() && "indexedDB" in window;
+  }
+
+  function isMobileLike() {
+    const userAgent = navigator.userAgent || "";
+    return (
+      /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent) ||
+      (navigator.maxTouchPoints > 1 && window.matchMedia("(max-width: 900px)").matches)
+    );
+  }
+
+  function supportsNativeFileShare() {
+    return (
+      isMobileLike() &&
+      typeof navigator.share === "function" &&
+      typeof navigator.canShare === "function" &&
+      typeof File === "function"
+    );
+  }
+
+  function getFallbackSaveLabel() {
+    if (supportsSaveFilePicker()) {
+      return "保存窗口";
+    }
+
+    if (supportsNativeFileShare()) {
+      return "系统保存面板";
+    }
+
+    return "浏览器下载";
+  }
+
+  function getDirectoryUnsupportedMessage() {
+    const fallback = getFallbackSaveLabel();
+
+    if (!window.isSecureContext) {
+      return `当前页面不是安全上下文，无法固定保存目录，将使用${fallback}`;
+    }
+
+    if (isMobileLike()) {
+      return `移动端浏览器通常不支持固定目录，将使用${fallback}`;
+    }
+
+    return `当前浏览器不支持固定目录，将使用${fallback}`;
+  }
+
+  function updateDirectoryControls() {
+    const directorySupported = supportsDirectoryExport();
+    els.chooseDirectoryButton.textContent = directorySupported ? "选择目录" : "保存说明";
+    els.clearDirectoryButton.disabled = !directorySupported && !exportDirectoryHandle;
   }
 
   function updateDirectoryStatus(message) {
@@ -439,13 +498,15 @@
       return;
     }
 
+    updateDirectoryControls();
+
     if (message) {
       els.directoryStatus.textContent = message;
       return;
     }
 
     if (!supportsDirectoryExport()) {
-      els.directoryStatus.textContent = "当前浏览器不支持固定目录，将使用普通下载";
+      els.directoryStatus.textContent = getDirectoryUnsupportedMessage();
       return;
     }
 
@@ -484,7 +545,9 @@
 
   async function chooseDirectory() {
     if (!supportsDirectoryExport()) {
-      updateDirectoryStatus("当前浏览器不支持固定目录。请用最新版 Chrome 或 Edge 打开此页面");
+      const message = `${getDirectoryUnsupportedMessage()}。点击下载时会优先弹出可用的保存窗口；如果浏览器不支持，会保存到默认下载目录。`;
+      updateDirectoryStatus(message);
+      showExportDialog("保存方式说明", message);
       return;
     }
 
@@ -719,6 +782,12 @@
     }
   }
 
+  function showExportError(error) {
+    const message = error && error.message ? error.message : "导出失败，请重试";
+    els.statusText.textContent = message;
+    showExportDialog("导出失败", message);
+  }
+
   function canvasToBlob(canvas) {
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -732,30 +801,95 @@
     });
   }
 
-  async function writeCanvasToDirectory(canvas, directoryHandle, filename) {
-    const blob = await canvasToBlob(canvas);
-    const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+  async function writeBlobToFileHandle(fileHandle, blob) {
     const writable = await fileHandle.createWritable();
     await writable.write(blob);
     await writable.close();
+  }
+
+  async function writeCanvasToDirectory(canvas, directoryHandle, filename) {
+    const blob = await canvasToBlob(canvas);
+    const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+    await writeBlobToFileHandle(fileHandle, blob);
+  }
+
+  async function saveCanvasWithPicker(canvas, filename) {
+    const fileHandle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: PNG_FILE_TYPES,
+      excludeAcceptAllOption: false,
+    });
+    const blob = await canvasToBlob(canvas);
+    await writeBlobToFileHandle(fileHandle, blob);
+  }
+
+  async function saveCanvasesWithPicker(canvases, filenames) {
+    let savedCount = 0;
+
+    try {
+      for (let index = 0; index < canvases.length; index += 1) {
+        await saveCanvasWithPicker(canvases[index], filenames[index]);
+        savedCount += 1;
+      }
+    } catch (error) {
+      error.savedCount = savedCount;
+      throw error;
+    }
+
+    return savedCount;
+  }
+
+  async function canvasesToFiles(canvases, filenames) {
+    const files = [];
+
+    for (let index = 0; index < canvases.length; index += 1) {
+      const blob = await canvasToBlob(canvases[index]);
+      files.push(new File([blob], filenames[index], { type: "image/png" }));
+    }
+
+    return files;
+  }
+
+  function canShareFiles(files) {
+    try {
+      return supportsNativeFileShare() && navigator.canShare({ files });
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function shareCanvases(canvases, filenames, settings) {
+    const files = await canvasesToFiles(canvases, filenames);
+
+    if (!canShareFiles(files)) {
+      return false;
+    }
+
+    await navigator.share({
+      files,
+      title: sanitizeFileBase(settings.title),
+      text: "小红书图文图片",
+    });
+
+    return true;
   }
 
   async function downloadCanvas(canvas, filename) {
     const blob = await canvasToBlob(canvas);
 
     return new Promise((resolve) => {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        document.body.append(link);
-        link.click();
-        link.remove();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
 
-        window.setTimeout(() => {
-          URL.revokeObjectURL(url);
-          resolve();
-        }, 120);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+        resolve();
+      }, 120);
     });
   }
 
@@ -794,11 +928,57 @@
 
     const filenames = buildExportFileNames(settings, canvases.length, 0);
 
+    if (supportsSaveFilePicker()) {
+      try {
+        const savedCount = await saveCanvasesWithPicker(canvases, filenames);
+        const message = `已通过保存窗口保存 ${savedCount} 张`;
+        els.statusText.textContent = message;
+        showExportDialog("保存完成", message);
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          const savedCount = error.savedCount || 0;
+          const message =
+            savedCount > 0 ? `已保存 ${savedCount} 张，其余已取消` : "已取消保存";
+          els.statusText.textContent = message;
+          showExportDialog("已取消保存", message);
+          return;
+        }
+
+        els.statusText.textContent = "保存窗口不可用，将改用浏览器下载";
+      }
+    }
+
+    if (supportsNativeFileShare()) {
+      try {
+        const shared = await shareCanvases(canvases, filenames, settings);
+
+        if (shared) {
+          const message = `已打开系统保存面板，共 ${canvases.length} 张`;
+          els.statusText.textContent = message;
+          showExportDialog("保存面板已打开", message);
+          return;
+        }
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          const message = "已取消系统保存";
+          els.statusText.textContent = message;
+          showExportDialog("已取消保存", message);
+          return;
+        }
+
+        els.statusText.textContent = "系统保存面板不可用，将改用浏览器下载";
+      }
+    }
+
     for (let index = 0; index < canvases.length; index += 1) {
       await downloadCanvas(canvases[index], filenames[index]);
     }
 
-    const message = `已导出 ${canvases.length} 张`;
+    const message =
+      isMobileLike() && !supportsDirectoryExport()
+        ? `已调用浏览器下载 ${canvases.length} 张。如弹出下载或保存提示，请确认；否则请到下载目录查看。`
+        : `已导出 ${canvases.length} 张`;
     els.statusText.textContent = message;
     showExportDialog("导出完成", message);
   }
@@ -841,7 +1021,12 @@
 
     els.chooseDirectoryButton.addEventListener("click", () => {
       chooseDirectory().catch((error) => {
-        updateDirectoryStatus(describeDirectoryError(error));
+        const message = describeDirectoryError(error);
+        updateDirectoryStatus(message);
+
+        if (error && error.name !== "AbortError") {
+          showExportDialog("目录选择失败", `${message}。点击下载时会使用${getFallbackSaveLabel()}。`);
+        }
       });
     });
 
@@ -863,15 +1048,11 @@
     });
 
     els.downloadPrimary.addEventListener("click", () => {
-      downloadCurrent(true).catch((error) => {
-        els.statusText.textContent = error.message;
-      });
+      downloadCurrent(true).catch(showExportError);
     });
 
     els.downloadAll.addEventListener("click", () => {
-      downloadCurrent(false).catch((error) => {
-        els.statusText.textContent = error.message;
-      });
+      downloadCurrent(false).catch(showExportError);
     });
   }
 
