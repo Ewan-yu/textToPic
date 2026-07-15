@@ -148,20 +148,23 @@ input:focus-visible {
   gap: 10px;
 }
 
-.title-field {
+.title-row {
   display: grid;
-  gap: 7px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
 }
 
-.title-field span {
+.title-row label {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
 }
 
-.title-field input,
+.title-row input,
 select {
   width: 100%;
+  min-width: 0;
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -170,7 +173,7 @@ select {
   color: var(--ink);
 }
 
-.title-field input::placeholder {
+.title-row input::placeholder {
   color: #a69c90;
 }
 
@@ -456,7 +459,7 @@ button:active {
   }
 
   .editor-pane {
-    grid-template-rows: auto minmax(320px, 52svh) auto auto;
+    grid-template-rows: auto auto minmax(320px, 52svh) auto auto;
   }
 
   .preview-pane {
@@ -485,6 +488,7 @@ button:active {
   }
 
   .section-head,
+  .title-row,
   .control-line,
   .save-line,
   .actions {

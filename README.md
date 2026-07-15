@@ -35,6 +35,8 @@ python -m http.server 8080
 
 如果浏览器不支持固定目录写入，会自动回退到普通下载。
 
+固定目录选择依赖浏览器的 File System Access API。建议使用最新版 Chrome 或 Edge，并直接打开页面，不要放在嵌入式预览窗口里。
+
 ## 项目结构
 
 ```text

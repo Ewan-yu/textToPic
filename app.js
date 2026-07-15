@@ -423,7 +423,11 @@
   }
 
   function supportsDirectoryExport() {
-    return "showDirectoryPicker" in window && "indexedDB" in window;
+    return window.isSecureContext && typeof window.showDirectoryPicker === "function";
+  }
+
+  function supportsDirectoryMemory() {
+    return supportsDirectoryExport() && "indexedDB" in window;
   }
 
   function updateDirectoryStatus(message) {
@@ -460,7 +464,7 @@
   }
 
   async function loadSavedDirectory() {
-    if (!supportsDirectoryExport()) {
+    if (!supportsDirectoryMemory()) {
       updateDirectoryStatus();
       return;
     }
@@ -476,10 +480,11 @@
 
   async function chooseDirectory() {
     if (!supportsDirectoryExport()) {
-      updateDirectoryStatus("当前浏览器不支持固定目录，将使用普通下载");
+      updateDirectoryStatus("当前浏览器不支持固定目录。请用最新版 Chrome 或 Edge 打开此页面");
       return;
     }
 
+    updateDirectoryStatus("正在打开本地目录选择窗口");
     const directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
     const hasPermission = await verifyDirectoryPermission(directoryHandle);
 
@@ -489,8 +494,34 @@
     }
 
     exportDirectoryHandle = directoryHandle;
-    await writeSetting(DIRECTORY_KEY, directoryHandle);
-    updateDirectoryStatus(`已记住目录：${directoryHandle.name}`);
+
+    if (!supportsDirectoryMemory()) {
+      updateDirectoryStatus(`已选择目录：${directoryHandle.name}（本次有效）`);
+      return;
+    }
+
+    try {
+      await writeSetting(DIRECTORY_KEY, directoryHandle);
+      updateDirectoryStatus(`已记住目录：${directoryHandle.name}`);
+    } catch (error) {
+      updateDirectoryStatus(`已选择目录：${directoryHandle.name}（本次有效，无法记住）`);
+    }
+  }
+
+  function describeDirectoryError(error) {
+    if (!error) {
+      return "目录选择失败";
+    }
+
+    if (error.name === "AbortError") {
+      return "未选择保存目录";
+    }
+
+    if (error.name === "SecurityError") {
+      return "浏览器阻止目录选择。请用 Chrome 或 Edge 的顶层页面打开，不要嵌入预览窗口";
+    }
+
+    return error.message || "目录选择失败";
   }
 
   async function clearDirectory() {
@@ -785,12 +816,7 @@
 
     els.chooseDirectoryButton.addEventListener("click", () => {
       chooseDirectory().catch((error) => {
-        if (error && error.name === "AbortError") {
-          updateDirectoryStatus();
-          return;
-        }
-
-        updateDirectoryStatus(error.message || "目录选择失败");
+        updateDirectoryStatus(describeDirectoryError(error));
       });
     });
 
