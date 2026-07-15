@@ -2,6 +2,9 @@
   "use strict";
 
   const MAX_CANVAS_HEIGHT = 32760;
+  const SETTINGS_DB = "text-to-pic-settings";
+  const SETTINGS_STORE = "kv";
+  const DIRECTORY_KEY = "export-directory";
   const SAMPLE_TEXT = `今天想分享一个很适合小红书长文的排版方式。
 
 它适合：
@@ -64,9 +67,13 @@
   };
 
   const els = {
+    titleInput: document.getElementById("titleInput"),
     textInput: document.getElementById("textInput"),
     sampleButton: document.getElementById("sampleButton"),
     clearButton: document.getElementById("clearButton"),
+    chooseDirectoryButton: document.getElementById("chooseDirectoryButton"),
+    clearDirectoryButton: document.getElementById("clearDirectoryButton"),
+    directoryStatus: document.getElementById("directoryStatus"),
     themeSelect: document.getElementById("themeSelect"),
     fontSelect: document.getElementById("fontSelect"),
     widthSelect: document.getElementById("widthSelect"),
@@ -91,6 +98,7 @@
   let renderTimer = 0;
   let latestCanvases = [];
   let latestWarning = "";
+  let exportDirectoryHandle = null;
 
   function getMode() {
     const checked = document.querySelector('input[name="exportMode"]:checked');
@@ -105,6 +113,7 @@
       mode: getMode(),
       theme: THEMES[els.themeSelect.value] || THEMES.clean,
       font: FONTS[els.fontSelect.value] || FONTS.system,
+      title: els.titleInput.value,
       width: Number(els.widthSelect.value),
       sliceHeight: Number(els.sliceHeight.value),
       fontSize,
@@ -120,8 +129,8 @@
     els.pagePaddingValue.textContent = els.pagePadding.value;
   }
 
-  function fontString(settings, weight) {
-    return `${weight || 400} ${settings.fontSize}px ${settings.font.stack}`;
+  function fontString(settings, weight, size) {
+    return `${weight || 400} ${size || settings.fontSize}px ${settings.font.stack}`;
   }
 
   function getContinuationPrefix(line) {
@@ -228,10 +237,30 @@
     const maxWidth = Math.max(1, settings.width - settings.padding * 2);
     const paragraphGap = Math.max(10, Math.round(settings.fontSize * 0.32));
     const blankGap = Math.max(24, Math.round(settings.lineHeightPx * 0.88));
+    const title = settings.title.trim();
+    const titleFontSize = Math.round(settings.fontSize * 1.22);
+    const titleLineHeight = Math.round(titleFontSize * 1.34);
+    const titleGap = Math.max(24, Math.round(settings.fontSize * 0.76));
     const items = [];
 
-    ctx.font = fontString(settings);
+    if (title.length > 0) {
+      ctx.font = fontString(settings, 750, titleFontSize);
 
+      wrapLine(ctx, title, maxWidth).forEach((line) => {
+        items.push({
+          kind: "title",
+          text: line,
+          height: titleLineHeight,
+          baseline: Math.round(titleFontSize),
+          size: titleFontSize,
+          weight: 750,
+        });
+      });
+
+      items.push({ kind: "space", height: titleGap });
+    }
+
+    ctx.font = fontString(settings);
     const rawLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
     const hasText = rawLines.some((line) => line.length > 0);
 
@@ -305,7 +334,13 @@
     ctx.fillStyle = settings.theme.foreground;
 
     items.forEach((item) => {
+      if (item.kind === "title") {
+        ctx.font = fontString(settings, item.weight, item.size);
+        ctx.fillText(item.text, settings.padding, y + item.baseline);
+      }
+
       if (item.kind === "text") {
+        ctx.font = fontString(settings);
         ctx.fillText(item.text, settings.padding, y + item.baseline);
       }
 
@@ -326,6 +361,205 @@
     }
 
     return [canvas];
+  }
+
+  function openSettingsDb() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) {
+        reject(new Error("当前浏览器不支持目录记忆"));
+        return;
+      }
+
+      const request = indexedDB.open(SETTINGS_DB, 1);
+
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(SETTINGS_STORE);
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function readSetting(key) {
+    const db = await openSettingsDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(SETTINGS_STORE, "readonly");
+      const request = transaction.objectStore(SETTINGS_STORE).get(key);
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => db.close();
+    });
+  }
+
+  async function writeSetting(key, value) {
+    const db = await openSettingsDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(SETTINGS_STORE, "readwrite");
+      transaction.objectStore(SETTINGS_STORE).put(value, key);
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async function deleteSetting(key) {
+    const db = await openSettingsDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(SETTINGS_STORE, "readwrite");
+      transaction.objectStore(SETTINGS_STORE).delete(key);
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  function supportsDirectoryExport() {
+    return "showDirectoryPicker" in window && "indexedDB" in window;
+  }
+
+  function updateDirectoryStatus(message) {
+    if (!els.directoryStatus) {
+      return;
+    }
+
+    if (message) {
+      els.directoryStatus.textContent = message;
+      return;
+    }
+
+    if (!supportsDirectoryExport()) {
+      els.directoryStatus.textContent = "当前浏览器不支持固定目录，将使用普通下载";
+      return;
+    }
+
+    if (exportDirectoryHandle) {
+      els.directoryStatus.textContent = `已记住目录：${exportDirectoryHandle.name}`;
+      return;
+    }
+
+    els.directoryStatus.textContent = "未设置保存目录";
+  }
+
+  async function verifyDirectoryPermission(directoryHandle) {
+    const options = { mode: "readwrite" };
+
+    if ((await directoryHandle.queryPermission(options)) === "granted") {
+      return true;
+    }
+
+    return (await directoryHandle.requestPermission(options)) === "granted";
+  }
+
+  async function loadSavedDirectory() {
+    if (!supportsDirectoryExport()) {
+      updateDirectoryStatus();
+      return;
+    }
+
+    try {
+      exportDirectoryHandle = await readSetting(DIRECTORY_KEY);
+      updateDirectoryStatus();
+    } catch (error) {
+      exportDirectoryHandle = null;
+      updateDirectoryStatus("目录记忆不可用，将使用普通下载");
+    }
+  }
+
+  async function chooseDirectory() {
+    if (!supportsDirectoryExport()) {
+      updateDirectoryStatus("当前浏览器不支持固定目录，将使用普通下载");
+      return;
+    }
+
+    const directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    const hasPermission = await verifyDirectoryPermission(directoryHandle);
+
+    if (!hasPermission) {
+      updateDirectoryStatus("未获得目录写入权限");
+      return;
+    }
+
+    exportDirectoryHandle = directoryHandle;
+    await writeSetting(DIRECTORY_KEY, directoryHandle);
+    updateDirectoryStatus(`已记住目录：${directoryHandle.name}`);
+  }
+
+  async function clearDirectory() {
+    exportDirectoryHandle = null;
+
+    try {
+      await deleteSetting(DIRECTORY_KEY);
+    } catch (error) {
+      // Ignore storage cleanup failures; clearing in memory is enough for this session.
+    }
+
+    updateDirectoryStatus("已清除保存目录");
+  }
+
+  function sanitizeFileBase(title) {
+    const clean = title
+      .trim()
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/[. ]+$/g, "")
+      .slice(0, 80)
+      .trim();
+
+    return clean || "xiaohongshu";
+  }
+
+  function padSerial(number) {
+    return String(number).padStart(2, "0");
+  }
+
+  function buildExportFileNames(settings, count, aliasIndex) {
+    const base = sanitizeFileBase(settings.title);
+    const alias = aliasIndex > 0 ? `(${aliasIndex})` : "";
+
+    if (settings.mode === "long") {
+      return [`${base}${alias}.png`];
+    }
+
+    return Array.from({ length: count }, (_, index) => {
+      return `${base}${alias}-${padSerial(index + 1)}.png`;
+    });
+  }
+
+  async function directoryContains(directoryHandle, filename) {
+    try {
+      await directoryHandle.getFileHandle(filename, { create: false });
+      return true;
+    } catch (error) {
+      if (error && error.name === "NotFoundError") {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  async function createNonOverwritingNames(directoryHandle, settings, count) {
+    for (let aliasIndex = 0; aliasIndex <= 999; aliasIndex += 1) {
+      const names = buildExportFileNames(settings, count, aliasIndex);
+      const collisions = await Promise.all(
+        names.map((name) => directoryContains(directoryHandle, name)),
+      );
+
+      if (!collisions.some(Boolean)) {
+        return names;
+      }
+    }
+
+    throw new Error("无法生成不重名的文件名");
   }
 
   function paginateItems(layout, settings) {
@@ -433,7 +667,7 @@
     renderTimer = window.setTimeout(renderPreview, 80);
   }
 
-  function downloadCanvas(canvas, filename) {
+  function canvasToBlob(canvas) {
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -441,6 +675,23 @@
           return;
         }
 
+        resolve(blob);
+      }, "image/png");
+    });
+  }
+
+  async function writeCanvasToDirectory(canvas, directoryHandle, filename) {
+    const blob = await canvasToBlob(canvas);
+    const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  }
+
+  async function downloadCanvas(canvas, filename) {
+    const blob = await canvasToBlob(canvas);
+
+    return new Promise((resolve) => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -453,7 +704,6 @@
           URL.revokeObjectURL(url);
           resolve();
         }, 120);
-      }, "image/png");
     });
   }
 
@@ -464,13 +714,34 @@
 
     const settings = getSettings();
     const canvases = primaryOnly ? latestCanvases.slice(0, 1) : latestCanvases;
-    const prefix = settings.mode === "long" ? "xiaohongshu-long" : "xiaohongshu-page";
 
     els.statusText.textContent = `正在导出 ${canvases.length} 张`;
 
+    if (exportDirectoryHandle) {
+      const hasPermission = await verifyDirectoryPermission(exportDirectoryHandle);
+
+      if (hasPermission) {
+        const filenames = await createNonOverwritingNames(
+          exportDirectoryHandle,
+          settings,
+          canvases.length,
+        );
+
+        for (let index = 0; index < canvases.length; index += 1) {
+          await writeCanvasToDirectory(canvases[index], exportDirectoryHandle, filenames[index]);
+        }
+
+        els.statusText.textContent = `已保存 ${canvases.length} 张到 ${exportDirectoryHandle.name}`;
+        return;
+      }
+
+      updateDirectoryStatus("目录权限失效，将使用普通下载");
+    }
+
+    const filenames = buildExportFileNames(settings, canvases.length, 0);
+
     for (let index = 0; index < canvases.length; index += 1) {
-      const suffix = settings.mode === "long" ? "" : `-${String(index + 1).padStart(2, "0")}`;
-      await downloadCanvas(canvases[index], `${prefix}${suffix}.png`);
+      await downloadCanvas(canvases[index], filenames[index]);
     }
 
     els.statusText.textContent = `已导出 ${canvases.length} 张`;
@@ -478,6 +749,7 @@
 
   function bindEvents() {
     const controls = [
+      els.titleInput,
       els.textInput,
       els.themeSelect,
       els.fontSelect,
@@ -498,15 +770,32 @@
     });
 
     els.sampleButton.addEventListener("click", () => {
+      els.titleInput.value = "小红书排版示例";
       els.textInput.value = SAMPLE_TEXT;
       scheduleRender();
       els.textInput.focus();
     });
 
     els.clearButton.addEventListener("click", () => {
+      els.titleInput.value = "";
       els.textInput.value = "";
       scheduleRender();
       els.textInput.focus();
+    });
+
+    els.chooseDirectoryButton.addEventListener("click", () => {
+      chooseDirectory().catch((error) => {
+        if (error && error.name === "AbortError") {
+          updateDirectoryStatus();
+          return;
+        }
+
+        updateDirectoryStatus(error.message || "目录选择失败");
+      });
+    });
+
+    els.clearDirectoryButton.addEventListener("click", () => {
+      clearDirectory();
     });
 
     els.downloadPrimary.addEventListener("click", () => {
@@ -522,14 +811,19 @@
     });
   }
 
+  els.titleInput.value = "小红书排版示例";
   els.textInput.value = SAMPLE_TEXT;
   bindEvents();
   updateRangeLabels();
   renderPreview();
+  loadSavedDirectory();
 
   window.textToPicDebug = {
     buildLayout,
+    buildExportFileNames,
+    createNonOverwritingNames,
     getSettings,
     renderPreview,
+    sanitizeFileBase,
   };
 })();

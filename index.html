@@ -28,6 +28,16 @@
           </div>
         </div>
 
+        <label class="title-field" for="titleInput">
+          <span>标题</span>
+          <input
+            id="titleInput"
+            type="text"
+            maxlength="80"
+            placeholder="用于图片标题和文件名"
+          />
+        </label>
+
         <label class="textarea-wrap" for="textInput">
           <textarea
             id="textInput"
@@ -37,6 +47,17 @@
         </label>
 
         <div class="controls" aria-label="输出设置">
+          <div class="save-line">
+            <div>
+              <span class="control-title">保存目录</span>
+              <p id="directoryStatus">未设置保存目录</p>
+            </div>
+            <div class="directory-actions">
+              <button class="ghost-button" id="chooseDirectoryButton" type="button">选择目录</button>
+              <button class="ghost-button" id="clearDirectoryButton" type="button">清除</button>
+            </div>
+          </div>
+
           <div class="control-line">
             <span class="control-title">输出</span>
             <div class="segmented" role="radiogroup" aria-label="输出模式">

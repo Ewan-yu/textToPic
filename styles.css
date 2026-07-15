@@ -124,7 +124,7 @@ input:focus-visible {
 
 .editor-pane {
   display: grid;
-  grid-template-rows: auto minmax(220px, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(220px, 1fr) auto auto;
   gap: 16px;
   padding: 20px;
 }
@@ -146,6 +146,32 @@ input:focus-visible {
 .actions {
   display: flex;
   gap: 10px;
+}
+
+.title-field {
+  display: grid;
+  gap: 7px;
+}
+
+.title-field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.title-field input,
+select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fffaf2;
+  color: var(--ink);
+}
+
+.title-field input::placeholder {
+  color: #a69c90;
 }
 
 .textarea-wrap {
@@ -189,6 +215,32 @@ textarea::placeholder {
   display: grid;
   gap: 14px;
   padding-top: 2px;
+}
+
+.save-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffaf2;
+}
+
+.save-line p {
+  max-width: 380px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.directory-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .control-line {
@@ -258,16 +310,6 @@ textarea::placeholder {
   display: grid;
   gap: 7px;
   min-width: 0;
-}
-
-select {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
-  background: #fffaf2;
-  color: var(--ink);
 }
 
 .range-grid {
@@ -444,12 +486,14 @@ button:active {
 
   .section-head,
   .control-line,
+  .save-line,
   .actions {
     align-items: stretch;
     flex-direction: column;
   }
 
   .quick-actions,
+  .directory-actions,
   .actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -473,6 +517,7 @@ button:active {
   .control-grid,
   .range-grid,
   .quick-actions,
+  .directory-actions,
   .actions {
     grid-template-columns: 1fr;
   }

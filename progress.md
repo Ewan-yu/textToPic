@@ -92,6 +92,27 @@
   - `progress.md`
   - `verification/word-wrap-english.png`
 
+### 维护：标题命名与固定保存目录
+
+- **状态：** complete
+- 执行的操作：
+  - 新增标题输入框。
+  - 标题显示在导出图片中。
+  - 导出文件以标题命名。
+  - 新增保存目录选择和清除入口。
+  - 使用 IndexedDB 记住 File System Access API 的目录句柄。
+  - 固定目录导出时先检查重名，重名后使用 `(1)`、`(2)` 等别名。
+  - 分段图片使用 `标题-01.png`，重名组使用 `标题(1)-01.png`。
+- 创建/修改的文件：
+  - `index.html`
+  - `styles.css`
+  - `app.js`
+  - `README.md`
+  - `PROJECT_DESIGN.md`
+  - `findings.md`
+  - `progress.md`
+  - `verification/title-directory-ui.png`
+
 ## 测试结果
 
 | 测试 | 输入 | 预期结果 | 实际结果 | 状态 |
@@ -108,6 +129,13 @@
 | 桌面响应式 | 1440x980 | 左右工作台可用 | `verification/desktop.png` 显示布局正常 | 通过 |
 | 移动响应式 | 390x844 全页 | 上下布局可用 | `verification/mobile-full.png` 显示布局正常 | 通过 |
 | 英文单词换行 | `photorealistic natural photo, natural candid off-shot style...` | 英文单词不被截断字符 | Canvas 排版行包含完整的 `natural`、`off-shot`、`selfie-style`，未出现 `n` / `atural` 拆分 | 通过 |
+| 标题进入画布 | 标题 `我的标题` | 输出图片首项为标题 | layout 第一项为 `title`，文本为 `我的标题` | 通过 |
+| 固定目录 API | 本地页面 `file:///.../index.html` | 浏览器支持目录选择 | `isSecureContext=true`，`showDirectoryPicker=true` | 通过 |
+| 长图标题命名 | 标题 `我的标题` | 文件名 `我的标题.png` | 生成 `我的标题.png` | 通过 |
+| 长图重名别名 | 已存在 `我的标题.png` | 文件名 `我的标题(1).png` | 生成 `我的标题(1).png` | 通过 |
+| 分段标题命名 | 标题 `我的标题`，3 张 | `我的标题-01.png` 至 `我的标题-03.png` | 生成 `我的标题-01.png`、`我的标题-02.png`、`我的标题-03.png` | 通过 |
+| 分段重名别名 | 已存在 `我的标题-01.png` 和 `我的标题(1)-02.png` | 整组跳到 `(2)` | 生成 `我的标题(2)-01.png` 至 `我的标题(2)-03.png` | 通过 |
+| 普通下载回退命名 | 标题 `下载测试`，分段下载 | 触发标题命名的 Blob 下载 | 拦截到 `下载测试-01.png`、`下载测试-02.png` | 通过 |
 
 ## 错误日志
 
