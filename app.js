@@ -89,6 +89,10 @@
     statusText: document.getElementById("statusText"),
     downloadPrimary: document.getElementById("downloadPrimary"),
     downloadAll: document.getElementById("downloadAll"),
+    exportDialog: document.getElementById("exportDialog"),
+    exportDialogTitle: document.getElementById("exportDialogTitle"),
+    exportDialogMessage: document.getElementById("exportDialogMessage"),
+    exportDialogClose: document.getElementById("exportDialogClose"),
   };
 
   if (!els.textInput || !els.previewList) {
@@ -698,6 +702,23 @@
     renderTimer = window.setTimeout(renderPreview, 80);
   }
 
+  function showExportDialog(title, message) {
+    if (!els.exportDialog) {
+      return;
+    }
+
+    els.exportDialogTitle.textContent = title;
+    els.exportDialogMessage.textContent = message;
+    els.exportDialog.hidden = false;
+    els.exportDialogClose.focus();
+  }
+
+  function hideExportDialog() {
+    if (els.exportDialog) {
+      els.exportDialog.hidden = true;
+    }
+  }
+
   function canvasToBlob(canvas) {
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -762,7 +783,9 @@
           await writeCanvasToDirectory(canvases[index], exportDirectoryHandle, filenames[index]);
         }
 
-        els.statusText.textContent = `已保存 ${canvases.length} 张到 ${exportDirectoryHandle.name}`;
+        const message = `已保存 ${canvases.length} 张到 ${exportDirectoryHandle.name}`;
+        els.statusText.textContent = message;
+        showExportDialog("保存完成", message);
         return;
       }
 
@@ -775,7 +798,9 @@
       await downloadCanvas(canvases[index], filenames[index]);
     }
 
-    els.statusText.textContent = `已导出 ${canvases.length} 张`;
+    const message = `已导出 ${canvases.length} 张`;
+    els.statusText.textContent = message;
+    showExportDialog("导出完成", message);
   }
 
   function bindEvents() {
@@ -822,6 +847,19 @@
 
     els.clearDirectoryButton.addEventListener("click", () => {
       clearDirectory();
+    });
+
+    els.exportDialogClose.addEventListener("click", hideExportDialog);
+    els.exportDialog.addEventListener("click", (event) => {
+      if (event.target === els.exportDialog) {
+        hideExportDialog();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !els.exportDialog.hidden) {
+        hideExportDialog();
+      }
     });
 
     els.downloadPrimary.addEventListener("click", () => {

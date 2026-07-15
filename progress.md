@@ -157,6 +157,31 @@
 | 标题区响应式布局 | 768x1180 视口 | 标题输入不撑开大空白 | `verification/layout-title-fixed-768.png` 显示标题行紧凑，正文区紧随其后 | 通过 |
 | 目录选择按钮触发 | 点击 `#chooseDirectoryButton` | 调用 `showDirectoryPicker` | mock 验证调用次数为 1，状态更新为已选择目录 | 通过 |
 
+### 维护：标题样式、导出弹窗和页脚信息
+
+- **状态：** complete
+- 执行的操作：
+  - 将标题输入恢复为标签在上、输入框整行对齐正文框的样式。
+  - 新增导出完成弹窗，导出后显示明显完成提示。
+  - 新增页脚，展示版权、作者和 GitHub 开源仓库。
+  - 更新 CSS/JS 版本号避免缓存旧资源。
+- 创建/修改的文件：
+  - `index.html`
+  - `styles.css`
+  - `app.js`
+  - `README.md`
+  - `findings.md`
+  - `progress.md`
+  - `verification/title-full-width-footer.png`
+  - `verification/export-dialog.png`
+  - `verification/footer-info.png`
+
+| 测试 | 输入 | 预期结果 | 实际结果 | 状态 |
+|------|------|---------|---------|------|
+| 标题输入样式 | 1800x1220 视口 | 标题输入整行对齐正文输入框 | `verification/title-full-width-footer.png` 显示对齐正常 | 通过 |
+| 导出完成弹窗 | 点击下载长图 | 显示明显完成提示 | 弹窗显示 `导出完成` 和 `已导出 1 张` | 通过 |
+| 页脚信息 | 滚动到底部 | 展示版权、作者、开源仓库 | 页脚文本为 `© 2026 Ewan`、`作者：Ewan Yu`、`GitHub 开源仓库` | 通过 |
+
 ## 错误日志
 
 | 时间戳 | 错误 | 尝试次数 | 解决方案 |

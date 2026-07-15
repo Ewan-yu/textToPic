@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>小红书图文生成器</title>
-    <link rel="stylesheet" href="./styles.css?v=20260715-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260715-4" />
   </head>
   <body>
     <header class="topbar">
@@ -28,15 +28,15 @@
           </div>
         </div>
 
-        <div class="title-row">
-          <label for="titleInput">标题</label>
+        <label class="title-field" for="titleInput">
+          <span>标题</span>
           <input
             id="titleInput"
             type="text"
             maxlength="80"
             placeholder="用于图片标题和文件名"
           />
-        </div>
+        </label>
 
         <label class="textarea-wrap" for="textInput">
           <textarea
@@ -148,6 +148,26 @@
       </aside>
     </main>
 
-    <script src="./app.js?v=20260715-3"></script>
+    <footer class="site-footer">
+      <span>© 2026 Ewan</span>
+      <span>作者：Ewan Yu</span>
+      <a href="https://github.com/Ewan-yu/textToPic" target="_blank" rel="noreferrer">GitHub 开源仓库</a>
+    </footer>
+
+    <div class="modal-backdrop" id="exportDialog" hidden>
+      <div
+        class="export-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exportDialogTitle"
+      >
+        <p class="eyebrow">导出完成</p>
+        <h2 id="exportDialogTitle">图片已保存</h2>
+        <p id="exportDialogMessage">已完成导出。</p>
+        <button class="primary-button" id="exportDialogClose" type="button">知道了</button>
+      </div>
+    </div>
+
+    <script src="./app.js?v=20260715-4"></script>
   </body>
 </html>

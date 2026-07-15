@@ -148,20 +148,18 @@ input:focus-visible {
   gap: 10px;
 }
 
-.title-row {
+.title-field {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
-.title-row label {
+.title-field span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
 }
 
-.title-row input,
+.title-field input,
 select {
   width: 100%;
   min-width: 0;
@@ -173,7 +171,7 @@ select {
   color: var(--ink);
 }
 
-.title-row input::placeholder {
+.title-field input::placeholder {
   color: #a69c90;
 }
 
@@ -440,6 +438,67 @@ button:active {
     0 0 0 1px rgba(34, 29, 22, 0.08);
 }
 
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
+  padding: 0 clamp(18px, 4vw, 48px) 28px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.site-footer a {
+  color: var(--accent-dark);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(35, 33, 29, 0.28);
+  backdrop-filter: blur(3px);
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.export-dialog {
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  background: var(--panel-bg);
+  box-shadow: 0 24px 80px rgba(35, 33, 29, 0.24);
+  animation: riseIn 180ms ease both;
+}
+
+.export-dialog h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.export-dialog p:not(.eyebrow) {
+  margin: 12px 0 20px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 @keyframes riseIn {
   from {
     opacity: 0;
@@ -488,7 +547,6 @@ button:active {
   }
 
   .section-head,
-  .title-row,
   .control-line,
   .save-line,
   .actions {
