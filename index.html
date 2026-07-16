@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>小红书图文生成器</title>
-    <link rel="stylesheet" href="./styles.css?v=20260715-6" />
+    <link rel="stylesheet" href="./styles.css?v=20260716-2" />
   </head>
   <body>
     <header class="topbar">
@@ -38,13 +38,80 @@
           />
         </label>
 
-        <label class="textarea-wrap" for="textInput">
-          <textarea
+        <div class="rich-editor-shell">
+          <div class="format-toolbar" role="toolbar" aria-label="正文格式">
+            <button
+              class="format-tool"
+              id="boldButton"
+              type="button"
+              title="加粗"
+              aria-label="加粗"
+              aria-keyshortcuts="Control+B Meta+B"
+              aria-pressed="false"
+            >
+              <strong aria-hidden="true">B</strong>
+            </button>
+            <span class="format-divider" aria-hidden="true"></span>
+            <div class="format-color-group">
+              <button
+                class="format-tool"
+                id="textColorButton"
+                type="button"
+                title="应用文字颜色"
+                aria-label="应用文字颜色"
+              >
+                <span class="text-color-glyph" aria-hidden="true">A</span>
+              </button>
+              <input
+                class="color-picker"
+                id="textColorPicker"
+                type="color"
+                value="#c94f3d"
+                title="选择文字颜色"
+                aria-label="选择文字颜色"
+              />
+            </div>
+            <div class="format-color-group">
+              <button
+                class="format-tool"
+                id="highlightButton"
+                type="button"
+                title="应用或取消荧光高亮"
+                aria-label="应用或取消荧光高亮"
+                aria-pressed="false"
+              >
+                <span class="highlight-glyph" aria-hidden="true">A</span>
+              </button>
+              <input
+                class="color-picker"
+                id="highlightColorPicker"
+                type="color"
+                value="#ffe568"
+                title="选择高亮颜色"
+                aria-label="选择高亮颜色"
+              />
+            </div>
+            <span class="format-divider" aria-hidden="true"></span>
+            <button
+              class="format-tool clear-format-tool"
+              id="clearFormatButton"
+              type="button"
+              title="清除所选文字格式"
+            >
+              清除格式
+            </button>
+          </div>
+          <div
             id="textInput"
+            class="rich-editor"
+            contenteditable="true"
+            role="textbox"
+            aria-label="正文内容"
+            aria-multiline="true"
             spellcheck="false"
-            placeholder="粘贴正文"
-          ></textarea>
-        </label>
+            data-placeholder="粘贴正文"
+          ></div>
+        </div>
 
         <div class="controls" aria-label="输出设置">
           <div class="save-line" id="saveLine">
@@ -172,6 +239,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=20260715-6"></script>
+    <script src="./app.js?v=20260716-2"></script>
   </body>
 </html>

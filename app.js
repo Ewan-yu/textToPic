@@ -5,22 +5,23 @@
   const SETTINGS_DB = "text-to-pic-settings";
   const SETTINGS_STORE = "kv";
   const DIRECTORY_KEY = "export-directory";
+  const HIGHLIGHT_COLOR = "#ffe568";
+  const HIGHLIGHT_TEXT_COLOR = "#2b260f";
   const PNG_FILE_TYPES = [
     {
       description: "PNG 图片",
       accept: { "image/png": [".png"] },
     },
   ];
-  const SAMPLE_TEXT = `今天想分享一个很适合小红书长文的排版方式。
-
-它适合：
-- 读书笔记
-- 旅行攻略
-- 情绪随笔
-- 产品使用心得
-
-保留你原来的换行、空行和列表结构。
-如果文本很长，可以切换到「固定分段」，生成多张等高图片。`;
+  const SAMPLE_CONTENT = [
+    { text: "今天想分享一个很适合小红书长文的排版方式。\n\n它适合：\n- " },
+    { text: "读书笔记", bold: true },
+    { text: "\n- 旅行攻略\n- 情绪随笔\n- 产品使用心得\n\n保留你原来的" },
+    { text: "换行、空行和列表结构", bold: true },
+    { text: "。\n如果文本很长，可以切换到「" },
+    { text: "固定分段", highlight: HIGHLIGHT_COLOR },
+    { text: "」，生成多张等高图片。" },
+  ];
 
   const THEMES = {
     clean: {
@@ -75,6 +76,12 @@
   const els = {
     titleInput: document.getElementById("titleInput"),
     textInput: document.getElementById("textInput"),
+    boldButton: document.getElementById("boldButton"),
+    textColorButton: document.getElementById("textColorButton"),
+    textColorPicker: document.getElementById("textColorPicker"),
+    highlightButton: document.getElementById("highlightButton"),
+    highlightColorPicker: document.getElementById("highlightColorPicker"),
+    clearFormatButton: document.getElementById("clearFormatButton"),
     sampleButton: document.getElementById("sampleButton"),
     clearButton: document.getElementById("clearButton"),
     chooseDirectoryButton: document.getElementById("chooseDirectoryButton"),
@@ -111,6 +118,7 @@
   let latestCanvases = [];
   let latestWarning = "";
   let exportDirectoryHandle = null;
+  let savedEditorRange = null;
 
   function getMode() {
     const checked = document.querySelector('input[name="exportMode"]:checked');
@@ -243,7 +251,310 @@
     return wrapped.length > 0 ? wrapped : [""];
   }
 
-  function buildLayout(text, settings) {
+  function appendStyledRun(runs, text, style) {
+    const normalizedText = text.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ");
+
+    if (normalizedText.length === 0) {
+      return;
+    }
+
+    const run = {
+      text: normalizedText,
+      bold: Boolean(style && style.bold),
+      color: normalizeStyleColor(style && style.color),
+      highlight: normalizeStyleColor(style && style.highlight, HIGHLIGHT_COLOR),
+    };
+    const previous = runs[runs.length - 1];
+
+    if (
+      previous &&
+      previous.bold === run.bold &&
+      previous.color === run.color &&
+      previous.highlight === run.highlight
+    ) {
+      previous.text += run.text;
+      return;
+    }
+
+    runs.push(run);
+  }
+
+  function hasTrailingNewline(runs) {
+    const lastRun = runs[runs.length - 1];
+    return Boolean(lastRun && lastRun.text.endsWith("\n"));
+  }
+
+  function isTransparentColor(color) {
+    if (typeof color !== "string") {
+      return true;
+    }
+
+    const normalized = color.replace(/\s/g, "").toLowerCase();
+    return (
+      normalized === "transparent" ||
+      normalized === "initial" ||
+      normalized === "inherit" ||
+      normalized === "rgba(0,0,0,0)"
+    );
+  }
+
+  function normalizeStyleColor(color, booleanFallback) {
+    if (color === true) {
+      return booleanFallback || null;
+    }
+
+    if (typeof color !== "string" || color.length === 0 || isTransparentColor(color)) {
+      return null;
+    }
+
+    return color;
+  }
+
+  function readEditorDocument() {
+    const flatRuns = [];
+    const blockTags = new Set(["DIV", "P", "LI", "UL", "OL", "BLOCKQUOTE"]);
+
+    function walk(node, inheritedStyle) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        appendStyledRun(flatRuns, node.nodeValue || "", inheritedStyle);
+        return;
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return;
+      }
+
+      const element = node;
+
+      if (element.tagName === "BR") {
+        appendStyledRun(flatRuns, "\n", inheritedStyle);
+        return;
+      }
+
+      const style = { ...inheritedStyle };
+      const fontWeight = element.style.fontWeight.toLowerCase();
+      const backgroundColor = element.style.backgroundColor;
+      const foregroundColor =
+        element.style.color ||
+        (element.tagName === "FONT" ? element.getAttribute("color") : "");
+
+      if (element.tagName === "B" || element.tagName === "STRONG") {
+        style.bold = true;
+      }
+
+      if (fontWeight === "normal" || fontWeight === "400") {
+        style.bold = false;
+      } else if (
+        fontWeight === "bold" ||
+        fontWeight === "bolder" ||
+        Number.parseInt(fontWeight, 10) >= 600
+      ) {
+        style.bold = true;
+      }
+
+      if (element.tagName === "MARK") {
+        style.highlight = HIGHLIGHT_COLOR;
+      }
+
+      if (backgroundColor) {
+        style.highlight = normalizeStyleColor(backgroundColor);
+      }
+
+      if (foregroundColor) {
+        style.color = normalizeStyleColor(foregroundColor);
+      }
+
+      const isBlock = blockTags.has(element.tagName);
+
+      if (isBlock && flatRuns.length > 0 && !hasTrailingNewline(flatRuns)) {
+        appendStyledRun(flatRuns, "\n", {});
+      }
+
+      Array.from(element.childNodes).forEach((child) => walk(child, style));
+
+      if (isBlock && element.nextSibling && !hasTrailingNewline(flatRuns)) {
+        appendStyledRun(flatRuns, "\n", {});
+      }
+    }
+
+    Array.from(els.textInput.childNodes).forEach((node) => {
+      walk(node, { bold: false, color: null, highlight: null });
+    });
+
+    const lines = [[]];
+
+    flatRuns.forEach((run) => {
+      const parts = run.text.split("\n");
+
+      parts.forEach((part, index) => {
+        appendStyledRun(lines[lines.length - 1], part, run);
+
+        if (index < parts.length - 1) {
+          lines.push([]);
+        }
+      });
+    });
+
+    return {
+      lines,
+      text: lines.map((line) => line.map((run) => run.text).join("")).join("\n"),
+    };
+  }
+
+  function setEditorContent(runs) {
+    const fragment = document.createDocumentFragment();
+
+    runs.forEach((run) => {
+      let node = document.createTextNode(run.text);
+
+      if (run.bold) {
+        const strong = document.createElement("strong");
+        strong.append(node);
+        node = strong;
+      }
+
+      if (run.color) {
+        const colorSpan = document.createElement("span");
+        colorSpan.style.color = run.color;
+        colorSpan.append(node);
+        node = colorSpan;
+      }
+
+      if (run.highlight) {
+        const mark = document.createElement("mark");
+        mark.style.backgroundColor = run.highlight;
+        mark.append(node);
+        node = mark;
+      }
+
+      fragment.append(node);
+    });
+
+    els.textInput.replaceChildren(fragment);
+    savedEditorRange = null;
+  }
+
+  function measureStyledUnit(ctx, unit, settings) {
+    ctx.font = fontString(settings, unit.bold ? 700 : 400);
+    return ctx.measureText(unit.text).width;
+  }
+
+  function mergeStyledUnits(units) {
+    const runs = [];
+
+    units.forEach((unit) => appendStyledRun(runs, unit.text, unit));
+
+    return {
+      runs,
+      text: runs.map((run) => run.text).join(""),
+    };
+  }
+
+  function trimStyledLineEnd(units) {
+    const trimmed = units.map((unit) => ({ ...unit }));
+
+    while (trimmed.length > 0) {
+      const last = trimmed[trimmed.length - 1];
+      last.text = last.text.replace(/[ ]+$/u, "");
+
+      if (last.text.length > 0) {
+        break;
+      }
+
+      trimmed.pop();
+    }
+
+    return trimmed;
+  }
+
+  function wrapStyledLine(ctx, rawRuns, maxWidth, settings) {
+    const normalizedRuns = rawRuns.map((run) => ({
+      ...run,
+      text: run.text.replace(/\t/g, "    "),
+    }));
+    const plainText = normalizedRuns.map((run) => run.text).join("");
+
+    if (plainText.trim().length === 0) {
+      return [mergeStyledUnits(normalizedRuns)];
+    }
+
+    const continuationPrefix = getContinuationPrefix(plainText);
+    const prefixUnits = continuationPrefix
+      ? [{ text: continuationPrefix, bold: false, color: null, highlight: null }]
+      : [];
+    const prefixWidth = prefixUnits.reduce(
+      (sum, unit) => sum + measureStyledUnit(ctx, unit, settings),
+      0,
+    );
+    const units = normalizedRuns.flatMap((run) => {
+      return tokenizeWrapUnits(run.text).map((text) => ({
+        text,
+        bold: run.bold,
+        color: run.color,
+        highlight: run.highlight,
+      }));
+    });
+    const wrapped = [];
+    let current = [];
+    let currentWidth = 0;
+
+    units.forEach((unit) => {
+      const unitWidth = measureStyledUnit(ctx, unit, settings);
+
+      if (currentWidth + unitWidth <= maxWidth || current.length === 0) {
+        current.push(unit);
+        currentWidth += unitWidth;
+        return;
+      }
+
+      const line = trimStyledLineEnd(current);
+
+      if (line.length > 0) {
+        wrapped.push(mergeStyledUnits(line));
+      }
+
+      if (isSpaceUnit(unit.text)) {
+        current = prefixUnits.map((prefixUnit) => ({ ...prefixUnit }));
+        currentWidth = prefixWidth;
+        return;
+      }
+
+      current = [...prefixUnits.map((prefixUnit) => ({ ...prefixUnit })), unit];
+      currentWidth = prefixWidth + unitWidth;
+
+      if (currentWidth > maxWidth && prefixUnits.length > 0) {
+        current = [unit];
+        currentWidth = unitWidth;
+      }
+    });
+
+    const finalLine = trimStyledLineEnd(current);
+
+    if (finalLine.length > 0) {
+      wrapped.push(mergeStyledUnits(finalLine));
+    }
+
+    return wrapped.length > 0 ? wrapped : [{ runs: [], text: "" }];
+  }
+
+  function createPlainEditorDocument(text) {
+    const normalizedText = text.replace(/\r\n?/g, "\n");
+
+    return {
+      lines: normalizedText.split("\n").map((line) => {
+        return line.length > 0
+          ? [{ text: line, bold: false, color: null, highlight: null }]
+          : [];
+      }),
+      text: normalizedText,
+    };
+  }
+
+  function buildLayout(editorDocument, settings) {
+    const documentData =
+      typeof editorDocument === "string"
+        ? createPlainEditorDocument(editorDocument)
+        : editorDocument;
     const measureCanvas = document.createElement("canvas");
     const ctx = measureCanvas.getContext("2d");
     const maxWidth = Math.max(1, settings.width - settings.padding * 2);
@@ -272,24 +583,25 @@
       items.push({ kind: "space", height: titleGap });
     }
 
-    ctx.font = fontString(settings);
-    const rawLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-    const hasText = rawLines.some((line) => line.length > 0);
+    const rawLines = documentData.lines;
+    const hasText = rawLines.some((line) => line.some((run) => run.text.length > 0));
 
     rawLines.forEach((rawLine, index) => {
-      if (rawLine.length === 0) {
+      const lineText = rawLine.map((run) => run.text).join("");
+
+      if (lineText.length === 0) {
         if (hasText) {
           items.push({ kind: "space", height: blankGap });
         }
         return;
       }
 
-      const visualLines = wrapLine(ctx, rawLine, maxWidth);
+      const visualLines = wrapStyledLine(ctx, rawLine, maxWidth, settings);
 
       visualLines.forEach((line) => {
         items.push({
           kind: "text",
-          text: line,
+          runs: line.runs,
           height: settings.lineHeightPx,
           baseline: Math.round(settings.fontSize),
         });
@@ -338,6 +650,31 @@
     return { canvas, ctx };
   }
 
+  function getHighlightTextColor(color) {
+    const normalized = color.replace(/\s/g, "");
+    const hexMatch = normalized.match(/^#([0-9a-f]{6})$/i);
+    const rgbMatch = normalized.match(/^rgba?\((\d+),(\d+),(\d+)/i);
+    let channels = null;
+
+    if (hexMatch) {
+      channels = [
+        Number.parseInt(hexMatch[1].slice(0, 2), 16),
+        Number.parseInt(hexMatch[1].slice(2, 4), 16),
+        Number.parseInt(hexMatch[1].slice(4, 6), 16),
+      ];
+    } else if (rgbMatch) {
+      channels = rgbMatch.slice(1, 4).map(Number);
+    }
+
+    if (!channels) {
+      return HIGHLIGHT_TEXT_COLOR;
+    }
+
+    const luminance =
+      (channels[0] * 0.299 + channels[1] * 0.587 + channels[2] * 0.114) / 255;
+    return luminance > 0.52 ? HIGHLIGHT_TEXT_COLOR : "#fffdf8";
+  }
+
   function drawItems(ctx, items, settings, startY) {
     let y = startY;
 
@@ -348,20 +685,45 @@
     items.forEach((item) => {
       if (item.kind === "title") {
         ctx.font = fontString(settings, item.weight, item.size);
+        ctx.fillStyle = settings.theme.foreground;
         ctx.fillText(item.text, settings.padding, y + item.baseline);
       }
 
       if (item.kind === "text") {
-        ctx.font = fontString(settings);
-        ctx.fillText(item.text, settings.padding, y + item.baseline);
+        let x = settings.padding;
+        const baselineY = y + item.baseline;
+
+        item.runs.forEach((run) => {
+          ctx.font = fontString(settings, run.bold ? 700 : 400);
+          const width = ctx.measureText(run.text).width;
+
+          if (run.highlight && run.text.length > 0) {
+            const highlightTop = baselineY - Math.round(settings.fontSize * 0.84);
+            const highlightHeight = Math.round(settings.fontSize * 1.08);
+
+            ctx.save();
+            ctx.globalAlpha = 0.78;
+            ctx.fillStyle = run.highlight;
+            ctx.fillRect(x - 2, highlightTop, width + 4, highlightHeight);
+            ctx.restore();
+          }
+
+          ctx.fillStyle =
+            run.color ||
+            (run.highlight
+              ? getHighlightTextColor(run.highlight)
+              : settings.theme.foreground);
+          ctx.fillText(run.text, x, baselineY);
+          x += width;
+        });
       }
 
       y += item.height;
     });
   }
 
-  function renderLongCanvas(text, settings) {
-    const layout = buildLayout(text, settings);
+  function renderLongCanvas(editorDocument, settings) {
+    const layout = buildLayout(editorDocument, settings);
     const desiredHeight = Math.max(settings.sliceHeight, layout.contentHeight);
     const canvasHeight = Math.min(desiredHeight, MAX_CANVAS_HEIGHT);
     const { canvas, ctx } = prepareCanvas(settings.width, canvasHeight, settings);
@@ -727,8 +1089,8 @@
     return pages;
   }
 
-  function renderPageCanvases(text, settings) {
-    const layout = buildLayout(text, settings);
+  function renderPageCanvases(editorDocument, settings) {
+    const layout = buildLayout(editorDocument, settings);
     const pages = paginateItems(layout, settings);
 
     return pages.map((items) => {
@@ -764,19 +1126,19 @@
 
   function renderPreview() {
     const settings = getSettings();
-    const text = els.textInput.value;
+    const editorDocument = readEditorDocument();
 
     latestWarning = "";
     latestCanvases =
       settings.mode === "long"
-        ? renderLongCanvas(text, settings)
-        : renderPageCanvases(text, settings);
+        ? renderLongCanvas(editorDocument, settings)
+        : renderPageCanvases(editorDocument, settings);
 
     els.previewList.replaceChildren();
     latestCanvases.forEach((canvas, index) => appendPreview(canvas, index, latestCanvases.length));
 
     const suffix = latestWarning ? ` · ${latestWarning}` : "";
-    const emptyHint = text.trim().length === 0 ? " · 请输入正文" : "";
+    const emptyHint = editorDocument.text.trim().length === 0 ? " · 请输入正文" : "";
     els.previewMeta.textContent = `${latestCanvases.length} 张`;
     els.statusText.textContent = `已生成 ${latestCanvases.length} 张 · ${settings.width}px${suffix}${emptyHint}`;
     updateActionLabels(settings, latestCanvases.length);
@@ -963,6 +1325,219 @@
     showExportDialog("导出完成", message);
   }
 
+  function selectionIsInEditor(selection) {
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    return (
+      els.textInput.contains(range.startContainer) &&
+      els.textInput.contains(range.endContainer)
+    );
+  }
+
+  function saveEditorSelection() {
+    const selection = window.getSelection();
+
+    if (!selectionIsInEditor(selection)) {
+      return false;
+    }
+
+    savedEditorRange = selection.getRangeAt(0).cloneRange();
+    return true;
+  }
+
+  function restoreEditorSelection() {
+    els.textInput.focus({ preventScroll: true });
+
+    const selection = window.getSelection();
+    const range = savedEditorRange || document.createRange();
+
+    if (!savedEditorRange) {
+      range.selectNodeContents(els.textInput);
+      range.collapse(false);
+    }
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function getSelectionHighlightColor() {
+    const selection = window.getSelection();
+
+    if (!selectionIsInEditor(selection)) {
+      return null;
+    }
+
+    let node = selection.anchorNode;
+
+    while (node && node !== els.textInput) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.style.backgroundColor) {
+          return normalizeStyleColor(node.style.backgroundColor);
+        }
+
+        if (node.tagName === "MARK") {
+          return HIGHLIGHT_COLOR;
+        }
+      }
+
+      node = node.parentNode;
+    }
+
+    const commandColor = document.queryCommandValue("hiliteColor");
+    return normalizeStyleColor(commandColor);
+  }
+
+  function getSelectionTextColor() {
+    const selection = window.getSelection();
+
+    if (!selectionIsInEditor(selection)) {
+      return null;
+    }
+
+    let node = selection.anchorNode;
+
+    while (node && node !== els.textInput) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const color =
+          node.style.color ||
+          (node.tagName === "FONT" ? node.getAttribute("color") : "");
+
+        if (color) {
+          return normalizeStyleColor(color);
+        }
+      }
+
+      node = node.parentNode;
+    }
+
+    return null;
+  }
+
+  function cssColorToHex(color) {
+    if (!color) {
+      return null;
+    }
+
+    const normalized = color.replace(/\s/g, "");
+    const longHex = normalized.match(/^#([0-9a-f]{6})$/i);
+    const shortHex = normalized.match(/^#([0-9a-f]{3})$/i);
+    const rgb = normalized.match(/^rgba?\((\d+),(\d+),(\d+)/i);
+
+    if (longHex) {
+      return `#${longHex[1].toLowerCase()}`;
+    }
+
+    if (shortHex) {
+      return `#${shortHex[1]
+        .split("")
+        .map((character) => character + character)
+        .join("")}`.toLowerCase();
+    }
+
+    if (rgb) {
+      return `#${rgb
+        .slice(1, 4)
+        .map((channel) => Number(channel).toString(16).padStart(2, "0"))
+        .join("")}`;
+    }
+
+    return null;
+  }
+
+  function updateColorToolStyles() {
+    els.textColorButton.style.setProperty("--tool-color", els.textColorPicker.value);
+    els.highlightButton.style.setProperty(
+      "--tool-color",
+      els.highlightColorPicker.value,
+    );
+  }
+
+  function updateFormatToolbar() {
+    const selection = window.getSelection();
+
+    if (!selectionIsInEditor(selection)) {
+      return;
+    }
+
+    els.boldButton.setAttribute(
+      "aria-pressed",
+      document.queryCommandState("bold") ? "true" : "false",
+    );
+    const textColor = getSelectionTextColor();
+    const highlightColor = getSelectionHighlightColor();
+    const textColorHex = cssColorToHex(textColor);
+    const highlightColorHex = cssColorToHex(highlightColor);
+
+    els.highlightButton.setAttribute("aria-pressed", highlightColor ? "true" : "false");
+
+    if (textColorHex) {
+      els.textColorPicker.value = textColorHex;
+    }
+
+    if (highlightColorHex) {
+      els.highlightColorPicker.value = highlightColorHex;
+    }
+
+    updateColorToolStyles();
+  }
+
+  function applyEditorFormat(command) {
+    restoreEditorSelection();
+
+    if (command === "highlight") {
+      const color = getSelectionHighlightColor()
+        ? "transparent"
+        : els.highlightColorPicker.value;
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("hiliteColor", false, color);
+    } else if (command === "textColor") {
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("foreColor", false, els.textColorPicker.value);
+    } else if (command === "clear") {
+      document.execCommand("removeFormat", false);
+    } else {
+      document.execCommand("styleWithCSS", false, false);
+      document.execCommand(command, false);
+    }
+
+    saveEditorSelection();
+    updateFormatToolbar();
+    scheduleRender();
+  }
+
+  function applyEditorColor(command, color) {
+    restoreEditorSelection();
+    document.execCommand("styleWithCSS", false, true);
+    document.execCommand(command, false, color);
+    saveEditorSelection();
+    updateFormatToolbar();
+    scheduleRender();
+  }
+
+  function insertPlainText(text) {
+    if (document.execCommand("insertText", false, text)) {
+      return;
+    }
+
+    const selection = window.getSelection();
+
+    if (!selectionIsInEditor(selection)) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const textNode = document.createTextNode(text);
+    range.deleteContents();
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
   function bindEvents() {
     const controls = [
       els.titleInput,
@@ -985,16 +1560,53 @@
       input.addEventListener("change", scheduleRender);
     });
 
+    [
+      els.boldButton,
+      els.textColorButton,
+      els.highlightButton,
+      els.clearFormatButton,
+    ].forEach((button) => {
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+    });
+
+    els.boldButton.addEventListener("click", () => applyEditorFormat("bold"));
+    els.textColorButton.addEventListener("click", () => applyEditorFormat("textColor"));
+    els.highlightButton.addEventListener("click", () => applyEditorFormat("highlight"));
+    els.clearFormatButton.addEventListener("click", () => applyEditorFormat("clear"));
+
+    els.textColorPicker.addEventListener("change", () => {
+      updateColorToolStyles();
+      applyEditorColor("foreColor", els.textColorPicker.value);
+    });
+
+    els.highlightColorPicker.addEventListener("change", () => {
+      updateColorToolStyles();
+      applyEditorColor("hiliteColor", els.highlightColorPicker.value);
+    });
+
+    els.textInput.addEventListener("paste", (event) => {
+      event.preventDefault();
+      insertPlainText(event.clipboardData.getData("text/plain"));
+      saveEditorSelection();
+      scheduleRender();
+    });
+
+    document.addEventListener("selectionchange", () => {
+      if (saveEditorSelection()) {
+        updateFormatToolbar();
+      }
+    });
+
     els.sampleButton.addEventListener("click", () => {
       els.titleInput.value = "小红书排版示例";
-      els.textInput.value = SAMPLE_TEXT;
+      setEditorContent(SAMPLE_CONTENT);
       scheduleRender();
       els.textInput.focus();
     });
 
     els.clearButton.addEventListener("click", () => {
       els.titleInput.value = "";
-      els.textInput.value = "";
+      setEditorContent([]);
       scheduleRender();
       els.textInput.focus();
     });
@@ -1037,9 +1649,10 @@
   }
 
   els.titleInput.value = "小红书排版示例";
-  els.textInput.value = SAMPLE_TEXT;
+  setEditorContent(SAMPLE_CONTENT);
   bindEvents();
   updateRangeLabels();
+  updateColorToolStyles();
   renderPreview();
   loadSavedDirectory();
 
@@ -1048,6 +1661,7 @@
     buildExportFileNames,
     createNonOverwritingNames,
     getSettings,
+    readEditorDocument,
     renderPreview,
     sanitizeFileBase,
   };
